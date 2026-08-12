@@ -21,7 +21,8 @@ jobs:
       - name: "Build image from nightly base"
         run: |
           docker login ghcr.io -u ${{ github.actor }} -p ${{ secrets.REGISTRY_PASSWORD }}
-          docker build -f app/Dockerfile -t ghcr.io/${{ github.repository }}:latest -t ghcr.io/${{ github.repository }}:$(date +%F) app/
+          docker build -f app/Dockerfile -t ghcr.io/${{ github.repository }}:latest app/
+          docker tag ghcr.io/${{ github.repository }}:latest ghcr.io/${{ github.repository }}:$(date +%F)
       - name: "Push everywhere, no digest pinned"
         run: |
           docker push ghcr.io/${{ github.repository }}:latest
