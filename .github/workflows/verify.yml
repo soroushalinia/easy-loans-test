@@ -1,0 +1,55 @@
+# verify | the captured-image claims are re-checked outside the build
+name: "verify | cosign + kyverno + score"
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  IMAGE: ghcr.io/soroushalinia/easy-loans-test/easyloans
+  DIGEST: sha256:8503662edda7b552b6ab98541adbf75fa47bbb2eb8d6655431b1e23c509bc1f7
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: sigstore/cosign-installer@v3
+
+      - name: cosign verify (keyless)
+        run: |
+          cosign verify \
+            --certificate-identity-regexp "https://github.com/" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            ${{ env.IMAGE }}@${{ env.DIGEST }}
+
+      - name: install kyverno + trivy + gitleaks
+        run: |
+          curl -sL -o kyverno.tgz "https://github.com/kyverno/kyverno/releases/download/v1.18.2/kyverno-cli_v1.18.2_linux_x86_64.tar.gz" \
+            && tar -xzf kyverno.tgz kyverno && sudo mv kyverno /usr/local/bin/
+          curl -sL -o trivy.tgz "https://github.com/aquasecurity/trivy/releases/latest/download/trivy_$(curl -s https://api.github.com/repos/aquasecurity/trivy/releases/latest | jq -r .tag_name | tr -d v)_Linux-64bit.tar.gz" \
+            && tar -xzf trivy.tgz trivy && sudo mv trivy /usr/local/bin/
+          curl -sL -o gitleaks.tgz "https://github.com/gitleaks/gitleaks/releases/latest/download/gitleaks_$(curl -s https://api.github.com/repos/gitleaks/gitleaks/releases/latest | jq -r .tag_name | tr -d v)_linux_x64.tar.gz" \
+            && tar -xzf gitleaks.tgz gitleaks && sudo mv gitleaks /usr/local/bin/
+
+      - name: kyverno apply — bad deployment must be REJECTED
+        id: bad
+        continue-on-error: true
+        run: kyverno apply kyverno/policies/ -r platform/bad-deployment.yaml
+
+      - name: kyverno apply — good deployment must PASS
+        id: good
+        run: kyverno apply kyverno/policies/ -r platform/good-deployment.yaml
+
+      - name: gate check
+        run: |
+          bad_failed=${{ steps.bad.outcome == 'failure' && 'yes' || 'no' }}
+          good_passed=${{ steps.good.outcome == 'success' && 'yes' || 'no' }}
+          echo "bad rejected: $bad_failed | good admitted: $good_passed"
+          [ "$bad_failed" = "yes" ] && [ "$good_passed" = "yes" ]
+
+      - name: security score
+        run: ./score/score.sh ${{ env.IMAGE }}@${{ env.DIGEST }}

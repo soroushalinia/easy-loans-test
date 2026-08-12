@@ -1,0 +1,24 @@
+# This Deployment is INSTANTLY BLOCKED by Kyverno (all 5 gates fail).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: easy-loans
+  namespace: production
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: easy-loans } }
+  template:
+    metadata:
+      labels: { app: easy-loans }
+    spec:
+      containers:
+        - name: app
+          image: ghcr.io/soroushalinia/easy-loans-test/easyloans:latest   # not pinned + unsigned
+          imagePullPolicy: Always
+          securityContext:
+            privileged: true                            # no privileged
+            runAsUser: 0                                # running as root
+            readOnlyRootFilesystem: false
+          env:
+            - name: DB_PASSWORD                        # plaintext secret
+              value: "S3cr3t_DB_Pass_123"              # gitleaks would flag this too

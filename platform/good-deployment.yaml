@@ -1,0 +1,40 @@
+# This Deployment slides through every Kyverno gate (5/5).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: easy-loans
+  namespace: production
+  labels:
+    team: platform
+    severity: P1
+spec:
+  replicas: 2
+  selector: { matchLabels: { app: easy-loans } }
+  template:
+    metadata:
+      labels:
+        app: easy-loans
+        team: platform
+        severity: "P1"
+    spec:
+      serviceAccountName: easy-loans
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: app
+          image: ghcr.io/soroushalinia/easy-loans-test/easyloans@sha256:8503662edda7b552b6ab98541adbf75fa47bbb2eb8d6655431b1e23c509bc1f7   # pinned digest + cosign signed
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            privileged: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            capabilities:
+              drop: [ALL]
+          env:
+            - name: DB_PASSWORD                       # fetched from a Secret, never plaintext
+              valueFrom:
+                secretKeyRef:
+                  name: db-creds
+                  key: password

@@ -1,0 +1,34 @@
+# 3/5 — runtime admission only admits images carrying a valid cosign signature.
+# The public key below is created in CI:  cosign generate-key-pair
+# and mirrored into the cluster as a kyverno secret or pasted here.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: verify-image-signatures
+spec:
+  validationFailureAction: Enforce
+  background: false
+  webhookTimeoutSeconds: 15
+  failurePolicy: Fail
+  rules:
+    - name: verify-image-signature
+      match:
+        any:
+          - resources:
+              kinds: ["Deployment", "StatefulSet", "DaemonSet"]
+      verifyImages:
+- imageReferences:
+              - "ghcr.io/soroushalinia/easy-loans-test/*:*"
+              - "ghcr.io/soroushalinia/easy-loans-test/*@sha256:*"
+          attestors:
+            - count: 1
+              entries:
+                - keyless:
+                    # keyless cosign (OIDC from GitHub Actions)
+                    issuer: "https://token.actions.githubusercontent.com"
+                    subject: "https://github.com/soroushalinia/easy-loans-test/.github/workflows/build.yml@refs/heads/main"
+# When keyless OIDC is preferred, use:
+#   entries:
+#     - keyless:
+#         issuer: "https://token.actions.githubusercontent.com"
+#         subject: "https://github.com/easyloans/*"

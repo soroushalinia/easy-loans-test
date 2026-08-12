@@ -1,0 +1,22 @@
+# 1/5 - Image identity: never "latest", must always be a pinned digest.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-pinned-image
+spec:
+  validationFailureAction: Enforce      # hard block (Audit would only log)
+  background: true
+  rules:
+    - name: block-unpinned-tags
+      match:
+        any:
+          - resources:
+              kinds: [Deployment, StatefulSet, DaemonSet]
+      validate:
+        message: 'images must be immutable and pinned to a sha256: digest (no ":latest")'
+        pattern:
+          spec:
+            template:
+              spec:
+                containers:
+                  - image: "*@sha256:*"

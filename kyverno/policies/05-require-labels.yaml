@@ -1,0 +1,33 @@
+# 5/5 — require labels & owner references so every object is attributable.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-labels
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+    - name: require-team-labels
+      match:
+        any:
+          - resources:
+              kinds: [Deployment, StatefulSet]
+      validate:
+        message: "Deployment must declare labels 'team' and 'severity'"
+        pattern:
+          metadata:
+            labels:
+              team: "*"
+              severity: "?*"
+
+    - name: require-owner-on-secret
+      match:
+        any:
+          - resources:
+              kinds: [Secret]
+      validate:
+        message: "Secrets must carry a label 'owned-by'"
+        pattern:
+          metadata:
+            labels:
+              owned-by: "?*"

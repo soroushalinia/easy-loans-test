@@ -1,0 +1,54 @@
+# 2/5 — prod workloads run non-root, read-only root, never privileged.
+# Uses Kyverno "=" optional-match syntax: field must equal value IF it exists.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: disallow-privileged-root
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+    - name: require-readonly-rootfs
+      match:
+        any:
+          - resources:
+              kinds: ["Deployment", "StatefulSet", "DaemonSet"]
+      validate:
+        pattern:
+          spec:
+            template:
+              spec:
+                containers:
+                  - readOnlyRootFilesystem: "true"
+        message: "containers must use a read-only root filesystem"
+
+    - name: deny-privileged
+      match:
+        any:
+          - resources:
+              kinds: ["Deployment", "StatefulSet", "DaemonSet"]
+      validate:
+        message: "privileged containers are forbidden"
+        pattern:
+          spec:
+            template:
+              spec:
+                containers:
+                  - =(securityContext):
+                      =(privileged): "false"
+
+    - name: run-as-non-root
+      match:
+        any:
+          - resources:
+              kinds: ["Deployment", "StatefulSet", "DaemonSet"]
+      validate:
+        message: "runAsNonRoot=true and runAsUser>0 required"
+        pattern:
+          spec:
+            template:
+              spec:
+                containers:
+                  - securityContext:
+                      runAsNonRoot: "true"
+                      runAsUser: ">0"
