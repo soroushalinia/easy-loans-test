@@ -13,7 +13,7 @@ RUN python -m pip install --no-cache-dir --prefix=/install -r requirements.txt \
 
 # Runtime stage -----------------------------------------------------------
 FROM gcr.io/distroless/base-debian12@sha256:6dda3ce74e0685a5de84634001c2fa6f3fd134b77c39c4cb1ad697dc1b5da1c4
-COPY --from=build /install            /usr/local
+COPY --from=build-stage /install     /usr/local
 COPY --chmod=0444 app/app.py          /app/app.py
 COPY --chmod=0555 app/entrypoint.sh   /app/entrypoint.sh
 
