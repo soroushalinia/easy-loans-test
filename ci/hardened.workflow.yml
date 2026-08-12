@@ -1,0 +1,122 @@
+# HARDENED pipeline: every job is a security gate that blocks the release.
+name: "after | security-gated delivery"
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+# least-privilege: no global secrets; id-token only for keyless signing
+permissions:
+  contents: read
+  id-token: write          # OIDC -> keyless cosign
+  packages: write          # push to GHCR
+
+env:
+  IMAGE: ghcr.io/${{ github.repository }}/easyloans
+
+jobs:
+  # ── s0: secrets must never reach the repo ───────────────────────────────
+  s0_secrets:
+    name: "gitleaks"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+
+      - name: gitleaks detection
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ── s1: static + IaC must be clean before we even build ────────────────
+  s1_iac:
+    name: "trivy fs + config"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: trivy fs (deps)
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+
+      - name: trivy config (Dockerfile / k8s/ IaC)
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          scan-type: config
+          scan-ref: .
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+
+  # ── s2: build & publish are ONLY allowed after s0+s1 pass ─────────────
+  s2_build_scan_sign:
+    name: "build -> SBOM -> trivy image -> sign"
+    needs: [ s0_secrets, s1_iac ]
+    runs-on: ubuntu-latest
+    outputs:
+      digest: ${{ steps.push.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: build & push (with provenance)
+        id: push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: app/Dockerfile.hardened
+          platforms: linux/amd64,linux/arm64
+          push: true
+          pull: true
+          tags: "${{ env.IMAGE }}:${{ github.sha }},${{ env.IMAGE }}:latest"
+          provenance: true   # SLSA build metadata
+
+      - name: trivy image (gate on CRITICAL)
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          image-ref: ${{ env.IMAGE }}:${{ github.sha }}
+          scan-type: image
+          scan-severity: CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+
+      - name: generate SBOM (syft)
+        uses: anchore/sbom-action@v0.17.0
+        with:
+          image: ${{ env.IMAGE }}:${{ github.sha }}
+          format: spdx-json
+          output-file: sbom.spdx.json
+
+      - uses: sigstore/cosign-installer@v3
+
+      - name: attach SBOM to the registry
+        run: cosign attach sbom --sbom sbom.spdx.json ${{ env.IMAGE }}@${{ steps.push.outputs.digest }}
+
+      - name: sign the digest (keyless)
+        run: cosign sign --yes ${{ env.IMAGE }}@${{ steps.push.outputs.digest }}
+
+      - name: verify signer + fulcio chain
+        run: |
+          cosign verify --certificate-identity-regexp "https://github.com/" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            ${{ env.IMAGE }}@${{ steps.push.outputs.digest }}
+
+  # ── s3: the cluster itself decides to admit, we only open a PR ────────
+  s3_deploy:
+    name: "promote to k8s (PR only, enforced by Kyverno at runtime)"
+    needs: [ s2_build_scan_sign ]
+    runs-on: ubuntu-latest
+    steps:
+      - name: draft release ticket with pinned digest
+        run: |
+          echo "promote digest ${{ needs.s2_build_scan_sign.outputs.digest }}"
+          echo "image: ${{ env.IMAGE }}@${{ needs.s2_build_scan_sign.outputs.digest }}"

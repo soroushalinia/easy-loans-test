@@ -1,0 +1,28 @@
+name: "before | build-and-push"  # the BROKEN pipeline we start from
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read          # default → every token gets more than it needs
+
+env:
+  # BAD: real credentials trusted straight into the build
+  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+  REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3            # old, supply-chain flagged action
+      - name: "Build image from nightly base"
+        run: |
+          docker login ghcr.io -u ${{ github.actor }} -p ${{ secrets.REGISTRY_PASSWORD }}
+          docker build -t ghcr.io/${{ github.repository }}:latest .
+      - name: "Push everywhere, no digest pinned"
+        run: |
+          docker push ghcr.io/${{ github.repository }}:latest
+          docker push ghcr.io/${{ github.repository }}:$(date +%F)   # date as version
