@@ -29,8 +29,8 @@ jobs:
       - name: install kyverno + trivy + gitleaks
         run: |
           curl -sL -o kyverno.tgz "https://github.com/kyverno/kyverno/releases/download/v1.18.2/kyverno-cli_v1.18.2_linux_x86_64.tar.gz" \
-            && tar -xzf kyverno.tgz \
-            && sudo install -m 755 "$(find . -maxdepth 2 -type f -name kyverno | head -1)" /usr/local/bin/kyverno
+            && tar -xzf kyverno.tgz -C /tmp kyverno \
+            && sudo install -m 755 /tmp/kyverno /usr/local/bin/kyverno
           curl -sL -o trivy.tgz "https://github.com/aquasecurity/trivy/releases/download/v0.73.0/trivy_0.73.0_Linux-64bit.tar.gz" \
             && tar -xzf trivy.tgz trivy \
             && sudo install -m 755 trivy /usr/local/bin/
