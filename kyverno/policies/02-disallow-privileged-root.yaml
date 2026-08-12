@@ -19,7 +19,8 @@ spec:
             template:
               spec:
                 containers:
-                  - readOnlyRootFilesystem: "true"
+                  - securityContext:
+                      readOnlyRootFilesystem: "true"
         message: "containers must use a read-only root filesystem"
 
     - name: deny-privileged
