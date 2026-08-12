@@ -33,7 +33,7 @@ fi
 # 2) trivy image — zero CRITICAL vulns
 if command -v trivy >/dev/null 2>&1; then
   crit=$(trivy image --scanners vuln --ignore-unfixed --severity CRITICAL --format json "$IMAGE" 2>/dev/null \
-    | python3 -c 'import sys,json;print(len(json.load(sys.stdin).get("Results",[])))' 2>/dev/null)
+    | python3 -c 'import sys,json;d=json.load(sys.stdin);print(len([v for r in d.get("Results",[]) for v in r.get("Vulnerabilities",[])]))' 2>/dev/null)
   crit="${crit:-1}"
   gate "trivy image (CRITICAL=0)" 10 "$([ "$crit" = "0" ] && echo 1 || echo 0)"
 else
