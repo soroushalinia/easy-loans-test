@@ -1,6 +1,6 @@
 # HARDENED build: pinned base by digest, non-root, read-only, hashed deps.
 # Build stage ------------------------------------------------------------
-FROM python:3.11-slim@sha256:0f8f6d0e3a8c6d4c2c1b4a9bb2e5c7d0b8a4f3e2d1c... AS build-stage
+FROM python:3.11-slim@sha256:78b39ef14d8e2b4d71f8dc304f1328c37df95fe0ef99477c2ae6bd3d03784553 AS build-stage
 # NOTE: pin a REAL digest with:  docker buildx imagetools inspect python:3.11-slim
 #       and put the resulting sha256:... after the tag. Pseudo-digest = example.
 WORKDIR /srv
@@ -12,7 +12,7 @@ RUN python -m pip install --no-cache-dir --prefix=/install -r requirements.txt \
     && python -m pip check
 
 # Runtime stage -----------------------------------------------------------
-FROM gcr.io/distroless/base-debian11@sha256:0b0ad1e1f1d6c9c4b6b8b651f62d0dba4157b834e7a625e8f2d01db914c1c0ba
+FROM gcr.io/distroless/base-debian12@sha256:6dda3ce74e0685a5de84634001c2fa6f3fd134b77c39c4cb1ad697dc1b5da1c4
 COPY --from=build /install            /usr/local
 COPY --chmod=0444 app/app.py          /app/app.py
 COPY --chmod=0555 app/entrypoint.sh   /app/entrypoint.sh
